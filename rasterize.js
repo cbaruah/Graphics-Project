@@ -45,6 +45,14 @@ var Eye = vec3.clone(defaultEye); // eye position in world space
 var Center = vec3.clone(defaultCenter); // view direction in world space
 var Up = vec3.clone(defaultUp); // view up vector in world space
 var viewDelta = 0; // how much to displace view with each key press
+
+
+var dMissile = [];
+var sleep = 0;
+var over = false;
+var mouse = null;
+var mouseX = null;
+var mouseY = null;
  
 // ASSIGNMENT HELPER FUNCTIONS
  
@@ -246,15 +254,19 @@ function handleKeyDown(event) {
             break;
     } // end switch
 } // end handleKeyDown
- 
+
+var imageCanvas = null;
 // set up the webGL environment
 function setupWebGL() {
     
     // Set up keys
     document.onkeydown = handleKeyDown; // call this when key pressed
+    document.onmousemove = moveMouse;
+/*    document.onmouseup = moveMouseUp;
+    document.onmousedown = moveMouseDown;*/
  
       // Get the image canvas, render an image in it
-     var imageCanvas = document.getElementById("myImageCanvas"); // create a 2d canvas
+      imageCanvas = document.getElementById("myImageCanvas"); // create a 2d canvas
       var cw = imageCanvas.width, ch = imageCanvas.height; 
       imageContext = imageCanvas.getContext("2d"); 
       var bkgdImage = new Image(); 
@@ -386,30 +398,6 @@ function loadModels() {
             var triToAdd; // tri indices to add to the index array
             var maxCorner = vec3.fromValues(Number.MIN_VALUE,Number.MIN_VALUE,Number.MIN_VALUE); // bbox corner
             var minCorner = vec3.fromValues(Number.MAX_VALUE,Number.MAX_VALUE,Number.MAX_VALUE); // other corner
-            
-            /*for(var i = 0; i < numTriangleSets; i++) {
-                for(var j = 0; j < numTriangleSets-1; j++) {
-                    if(getDistance[inputTriangles[j]] < getDistance[inputTriangles[j+1]]) {
-                        var temp = inputTriangles[j];
-                        inputTriangles[j] = inputTriangles[j+1];
-                        inputTriangles[j+1] = temp;
-                    }
-                }
-            }
-
-            var i = 0;
-            while(i < numTriangleSets)
-            {
-                var j = i;
-                var temp = inputTriangles[i];
-                while(j >= 0 && inputTriangles[j].material.alpha != 1 && temp.material.alpha == 1)
-                {
-                    inputTriangles[j + 1] = inputTriangles[j];
-                    j = j - 1;
-                }
-                inputTriangles[j + 1] = temp;
-                i = i + 1;
-            }*/
  
             // process each triangle set to load webgl vertex and triangle buffers
             numTriangleSets = inputTriangles.length; // remember how many tri sets
@@ -481,31 +469,7 @@ function loadModels() {
                 var temp = vec3.create(); // an intermediate vec3
                 var minXYZ = vec3.create(), maxXYZ = vec3.create();  // min/max xyz from ellipsoid
                 numEllipsoids = inputEllipsoids.length; // remember how many ellipsoids
- /*
-                for(var i=0; i<numEllipsoids; i++) {
-                    for(var j=0; j<numEllipsoids-1; j++) {
-                        if(inputEllipsoids[j] < inputEllipsoids[j+1]) {
-                            var temp = inputEllipsoids[j];
-                            inputEllipsoids[j] = inputEllipsoids[j+1];
-                            inputEllipsoids[j+1] = temp;
-                        }
-                    }
-                }
 
-                var i = 0;*/
-                /*while(i < numEllipsoids)
-                {
-                    var j = i;
-                    var temp = inputEllipsoids[i];
-                    while(j >= 0 && inputEllipsoids[j].alpha != 1 && temp.alpha == 1)
-                    {
-                        inputEllipsoids[j + 1] = inputEllipsoids[j];
-                        j = j - 1;
-                    }
-                    inputEllipsoids[j + 1] = temp;
-                    i = i + 1;
-                }*/
- 
                 for (var whichEllipsoid=0; whichEllipsoid<numEllipsoids; whichEllipsoid++) {
                     
                     // set up various stats and transforms for this ellipsoid
@@ -772,6 +736,8 @@ function Obj(dist, type, index)
 }
 // render the loaded model
 function renderModels() {
+    //moveMissile();
+    //startMissile();
     var Model = [];
     for(var i = 0; i < numTriangleSets; i++)
     {
@@ -950,7 +916,137 @@ function renderModels() {
     } // end for each ellipsoid
 } // end render model
  
+//Functions specifically for program 4
+
+
+
+function startMissile()
+{
+    sleep = sleep + 1;
+
+    // set up needed view params
+    var lookAt = vec3.create(), viewRight = vec3.create(), temp = vec3.create(); // lookat, right & temp vectors
+    lookAt = vec3.normalize(lookAt,vec3.subtract(temp,Center,Eye)); // get lookat vector
+    viewRight = vec3.normalize(viewRight,vec3.cross(temp,lookAt,Up)); // get view right vector
+    function rotateModel(axis,direction,index) {
+        if (dMissile[index] != null) {
+            var newRotation = mat4.create();
  
+            mat4.fromRotation(newRotation,direction*rotateTheta,axis); // get a rotation matrix around passed axis
+            vec3.transformMat4(dMissile[index].xAxis,dMissile[index].xAxis,newRotation); // rotate model x axis tip
+            vec3.transformMat4(dMissile[index].yAxis,dMissile[index].yAxis,newRotation); // rotate model y axis tip
+        } // end if there is a highlighted model
+    } // end rotate model
+
+    if(dMissile.length == 0 && over == false)
+    {
+        for(var i = 0; i <= numEllipsoids-1; i++)
+        {
+            if(inputEllipsoids[i].texture == "up.jpg")
+            {
+                dMissile.push(inputEllipsoids[i]);
+            }
+            
+        }
+    }
+
+    if(sleep%100 == 0 && over == false)
+    {
+        var index = Math.floor(Math.random() * (dMissile.length - 1)) + 1;
+        dMissile[index].speedX = (dMissile[index].target - dMissile[index].x)*0.01;
+        //console.log("Xspeed: "+dMissile[index].speedX);
+        dMissile[index].speedY = (0.3 - dMissile[index].y)*0.01;
+        //console.log("Yspeed: "+dMissile[index].speedY);
+        var direction = (-1 * Math.atan(dMissile[index].speedY/dMissile[index].speedX)) + Math.PI/2;
+
+        if(direction > Math.PI/2)
+        {
+            direction = direction + Math.PI;
+        }
+
+        rotateModel(lookAt, direction, index);
+
+        if(dMissile.length == 0)
+        {
+            over = true;
+        }
+    }
+}
+
+function moveMissile()
+{
+    var getModel = null;
+    // set up needed view params
+    var lookAt = vec3.create(), viewRight = vec3.create(), temp = vec3.create(); // lookat, right & temp vectors
+    lookAt = vec3.normalize(lookAt,vec3.subtract(temp,Center,Eye)); // get lookat vector
+    viewRight = vec3.normalize(viewRight,vec3.cross(temp,lookAt,Up)); // get view right vector
+    function translateModel(offset) {
+        //if (handleKeyDown.modelOn != null)
+        vec3.add(getModels.translation,getModels.translation,offset);
+    }
+
+    for(var i = 0; i <= numEllipsoids-1; i++)
+    {
+        if(inputEllipsoids[i].texture == "down.jpg")
+        {
+            getModels = inputEllipsoids[i];
+            //console.log(getModels);
+            translateModel(vec3.scale(temp, viewRight, -inputEllipsoids[i].speedX));
+            translateModel(vec3.scale(temp, Up, inputEllipsoids[i].speedY));
+        }
+    } 
+
+}
+
+function moveMouse(event)
+{   
+    //console.log("move mouse function");
+    function translateModel(offset)
+    {
+        vec3.add(mouse.translation,mouse.translation,offset);
+    }
+
+    if(mouse == null)
+    {
+        //console.log("here1");
+        for(var i = 0; i <= numTriangleSets - 1; i++)
+        {
+            //console.log("here2");
+            console.log(inputTriangles[i].material.texture);
+            if(inputTriangles[i].material.texture == "cross.jpg")
+            {
+                mouse = inputTriangles[i];
+                console.log(mouse);
+            }
+        }
+    }
+
+    // set up needed view params
+    var lookAt = vec3.create(), viewRight = vec3.create(), temp = vec3.create(); // lookat, right & temp vectors
+    lookAt = vec3.normalize(lookAt,vec3.subtract(temp,Center,Eye)); // get lookat vector
+    viewRight = vec3.normalize(viewRight,vec3.cross(temp,lookAt,Up)); // get view right vector
+
+    var x = event.clientX - imageCanvas.getBoundingClientRect().left;
+    var y = event.clientY - imageCanvas.getBoundingClientRect().top;
+    x = 1.5 - (x/200);
+    y = 1.1 - (y/300);
+
+    //console.log(x+"::::"+y);
+
+    if(mouseX == null || mouseY == null)
+    {
+        translateModel(vec3.scale(temp,viewRight,-x));
+        translateModel(vec3.scale(temp,Up,y));
+    }
+    else
+    {
+        translateModel(vec3.scale(temp,viewRight,(-x + mouseX)));
+        translateModel(vec3.scale(temp,Up,(y - mouseY))); 
+    }
+
+    mouseX = x;
+    mouseY = y;
+}
 /* MAIN -- HERE is where execution begins after window load */
  
 function main() {
