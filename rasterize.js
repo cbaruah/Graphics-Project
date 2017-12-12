@@ -46,13 +46,6 @@ var Center = vec3.clone(defaultCenter); // view direction in world space
 var Up = vec3.clone(defaultUp); // view up vector in world space
 var viewDelta = 0; // how much to displace view with each key press
 
-
-var dMissile = [];
-var sleep = 0;
-var over = false;
-var mouse = null;
-var mouseX = null;
-var mouseY = null;
  
 // ASSIGNMENT HELPER FUNCTIONS
  
@@ -256,16 +249,20 @@ function handleKeyDown(event) {
 } // end handleKeyDown
 
 var imageCanvas = null;
+var scoreCanvas = null;
+var scoreContext = null;
 // set up the webGL environment
 function setupWebGL() {
     
     // Set up keys
     document.onkeydown = handleKeyDown; // call this when key pressed
-    document.onmousemove = moveMouse;
-/*    document.onmouseup = moveMouseUp;
-    document.onmousedown = moveMouseDown;*/
- 
+    //document.onmousemove = aim;
+    document.onmouseup = mouseUp;
+    
+    
       // Get the image canvas, render an image in it
+      scoreCanvas = document.getElementById("scoreCanvas");
+      scoreContext = scoreCanvas.getContext("2d");
       imageCanvas = document.getElementById("myImageCanvas"); // create a 2d canvas
       var cw = imageCanvas.width, ch = imageCanvas.height; 
       imageContext = imageCanvas.getContext("2d"); 
@@ -507,7 +504,7 @@ function loadModels() {
                     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(ellipsoidModel.triangles),gl.STATIC_DRAW); // data in
                 } // end for each ellipsoid
                 
-                viewDelta = vec3.length(vec3.subtract(temp,maxCorner,minCorner)) / 100; // set global
+                viewDelta = vec3.length(vec3.subtract(temp,maxCorner,minCorner)) / 500; // set global
             } // end if ellipsoid file loaded
         } // end if triangle file loaded
     } // end try 
@@ -734,10 +731,17 @@ function Obj(dist, type, index)
     this.type = type;
     this.index = index;
 }
+var score = 0;
 // render the loaded model
 function renderModels() {
-    //moveMissile();
-    //startMissile();
+    scoreContext.clearRect(0, 0, scoreContext.canvas.width, scoreContext.canvas.height);
+    scoreContext.font = "13px Comic Sans";
+    scoreContext.fillStyle = 'blue';
+    scoreContext.fillText("Score: "+score, 5, 20);
+    checkCollisionWithAntiMissile();
+    //checkTriangles();
+    moveAntiMissile();
+    startMissile();
     var Model = [];
     for(var i = 0; i < numTriangleSets; i++)
     {
@@ -810,6 +814,10 @@ function renderModels() {
     for (var whichTriSet=0; whichTriSet<numTriangleSets; whichTriSet++) {
         currSet = inputTriangles[whichTriSet];
         
+        if(currSet.invisible)
+        {
+            continue;
+        }
         // make model transform, add to view project
         makeModelTransform(currSet);
         mat4.multiply(pvmMatrix,pvMatrix,mMatrix); // project * view * model
@@ -866,6 +874,10 @@ function renderModels() {
     for (var whichEllipsoid=0; whichEllipsoid<numEllipsoids; whichEllipsoid++) {
         ellipsoid = inputEllipsoids[whichEllipsoid];
         
+        if(ellipsoid.invisible)
+        {
+            continue;
+        }
         // define model transform, premult with pvmMatrix, feed to vertex shader
         makeModelTransform(ellipsoid);
         pvmMatrix = mat4.multiply(pvmMatrix,pvMatrix,mMatrix); // premultiply with pv matrix
@@ -918,12 +930,17 @@ function renderModels() {
  
 //Functions specifically for program 4
 
-
+var dMissile = [];
+var sleep = 0;
+var missileOver = false;
+var mouse = null;
+var mouseX = null;
+var mouseY = null;
+/*var bInvisible = false;
+var mInvisible = false;*/
 
 function startMissile()
 {
-    sleep = sleep + 1;
-
     // set up needed view params
     var lookAt = vec3.create(), viewRight = vec3.create(), temp = vec3.create(); // lookat, right & temp vectors
     lookAt = vec3.normalize(lookAt,vec3.subtract(temp,Center,Eye)); // get lookat vector
@@ -932,121 +949,233 @@ function startMissile()
         if (dMissile[index] != null) {
             var newRotation = mat4.create();
  
-            mat4.fromRotation(newRotation,direction*rotateTheta,axis); // get a rotation matrix around passed axis
+            mat4.fromRotation(newRotation,direction,axis); // get a rotation matrix around passed axis
             vec3.transformMat4(dMissile[index].xAxis,dMissile[index].xAxis,newRotation); // rotate model x axis tip
             vec3.transformMat4(dMissile[index].yAxis,dMissile[index].yAxis,newRotation); // rotate model y axis tip
         } // end if there is a highlighted model
     } // end rotate model
 
-    if(dMissile.length == 0 && over == false)
+    if(dMissile.length == 0 && !missileOver)
     {
-        for(var i = 0; i <= numEllipsoids-1; i++)
+        for(var i = 0; i < numEllipsoids; i++)
         {
-            if(inputEllipsoids[i].texture == "up.jpg")
+            if(inputEllipsoids[i].texture == "down.jpg")
             {
                 dMissile.push(inputEllipsoids[i]);
+                //console.log(dMissile[i]);
             }
             
         }
     }
 
-    if(sleep%100 == 0 && over == false)
+    if(!missileOver)
     {
-        var index = Math.floor(Math.random() * (dMissile.length - 1)) + 1;
-        dMissile[index].speedX = (dMissile[index].target - dMissile[index].x)*0.01;
-        //console.log("Xspeed: "+dMissile[index].speedX);
-        dMissile[index].speedY = (0.3 - dMissile[index].y)*0.01;
-        //console.log("Yspeed: "+dMissile[index].speedY);
-        var direction = (-1 * Math.atan(dMissile[index].speedY/dMissile[index].speedX)) + Math.PI/2;
-
-        if(direction > Math.PI/2)
+        for(var index = 0; index < dMissile.length; index++)
         {
-            direction = direction + Math.PI;
+            var diffX = (dMissile[index].target - dMissile[index].x);
+            var addX = (dMissile[index].target + dMissile[index].x);
+            var squareX = addX*addX;
+            var diffY = (0.3 - dMissile[index].y);
+            var addY = (0.3 + dMissile[index].y);
+            var squareY = addY*addY;
+            var rootVal = Math.sqrt(squareX + squareY);
+            
+            dMissile[index].speedX = (diffX/rootVal)*0.009;
+
+            dMissile[index].speedY = (diffY/rootVal)*0.009;
+            dMissile[index].destX = dMissile[index].target;
+            dMissile[index].destY = 0;
+            var direction = (-1 * Math.atan(dMissile[index].speedY/dMissile[index].speedX)) + Math.PI/2;
+
+            if(direction > Math.PI/2)
+            {
+                direction = direction + Math.PI;
+            }
+
+            rotateModel(lookAt, direction, index);
+            dMissile.splice(index,1);
+            if(dMissile.length == 0)
+            {
+                missileOver = true;
+            }
         }
 
-        rotateModel(lookAt, direction, index);
-
-        if(dMissile.length == 0)
-        {
-            over = true;
-        }
     }
 }
 
-function moveMissile()
+/*function distanceBetweenEllipsoids(i, j) {
+    var t1 = [inputEllipsoids[i].x, inputEllipsoids[i].y, inputEllipsoids[i].z];
+    var t2 = [inputEllipsoids[j].x, inputEllipsoids[j].y, inputEllipsoids[j].z];
+
+    var a = t1[0] - t2[0];
+    a = a*a;
+    var b = t1[1] - t2[1];
+    b = b*b;
+    var c = t1[2] - t2[2];
+    c = c*c;
+
+    return Math.sqrt(a + b + c);
+}*/
+
+function checkCollisionWithAntiMissile()
 {
-    var getModel = null;
+    var flag = 1;
+    for(var i = 0; i < numEllipsoids; i++)
+    {
+        //console.log("here2");
+        for(var j = 0; j < numEllipsoids;  j++)
+        {
+            if(i != j && !inputEllipsoids[i].invisible && (inputEllipsoids[i].texture == "down.jpg" || inputEllipsoids[i].texture == "ufo.jpg" && inputEllipsoids[j].texture == "up.jpg" ) ||
+                (inputEllipsoids[i].texture == "up.jpg" && inputEllipsoids[j].texture == "down.jpg") || (inputEllipsoids[i].texture == "up.jpg" && inputEllipsoids[j].texture == "ufo.jpg") || (inputEllipsoids[i].texture == "down.jpg" && inputEllipsoids[j].texture == "ufo.jpg"))
+            {
+                if(inputEllipsoids[j].x+inputEllipsoids[j].translation[0]>=(inputEllipsoids[i].x+inputEllipsoids[i].translation[0]-0.05)&&
+                inputEllipsoids[j].x+inputEllipsoids[j].translation[0]<=(inputEllipsoids[i].x+inputEllipsoids[i].translation[0]+0.05)&&
+                inputEllipsoids[j].y+inputEllipsoids[j].translation[1]>=(inputEllipsoids[i].y+inputEllipsoids[i].translation[1]-0.05)&&
+                inputEllipsoids[j].y+inputEllipsoids[j].translation[1]<=(inputEllipsoids[i].y+inputEllipsoids[i].translation[1]+0.05)
+               )
+                {
+                    score++;
+                    inputEllipsoids[i].invisible = true;
+                    inputEllipsoids[j].invisible = true;
+                    flag = 0;
+                    break;
+                }
+            }
+
+        }
+        if(flag == 0)
+        {
+            break;
+        }
+
+        for(var j=0;j<numTriangleSets;j++){
+            if(!inputEllipsoids[i].invisible&&inputTriangles[j].material.texture == "white.jpg"&&inputEllipsoids[i].texture == "down.jpg"){
+                for(var k=0;k<inputTriangles[j].vertices.length;k++){
+                    if(inputTriangles[j].vertices[k][0]+0.05>inputEllipsoids[i].x+inputEllipsoids[i].translation[0]-inputEllipsoids[i].a&&
+                        inputTriangles[j].vertices[k][0]-0.05<inputEllipsoids[i].x+inputEllipsoids[i].translation[0]+inputEllipsoids[i].a&&
+                        inputTriangles[j].vertices[k][1]+0.05>inputEllipsoids[i].y+inputEllipsoids[i].translation[1]-inputEllipsoids[i].b&&
+                        inputTriangles[j].vertices[k][1]-0.05<inputEllipsoids[i].y+inputEllipsoids[i].translation[1]+inputEllipsoids[i].b
+                        ){
+                           // console.log("Nichewla" + j);
+                           // console.log("Uperwala" + i);
+                            inputTriangles[j].invisible = true;
+                            break;
+                        }
+                }
+            }
+        }
+    }
+/*    for(var i = 0; i < inputEllipsoids.length; i++)
+    {
+        // console.log(i + " : " + inputEllipsoids.length);
+        if( inputEllipsoids[i].texture == "up.jpg" && i != l)
+        {
+            if (distanceBetweenEllipsoids(i, l) < 3) {
+                inputEllipsoids[i].invisible = true;
+                // console.log('collision');
+                return true;
+            }
+        }
+    }
+    return false;*/
+}
+
+function moveAntiMissile()
+{
     // set up needed view params
     var lookAt = vec3.create(), viewRight = vec3.create(), temp = vec3.create(); // lookat, right & temp vectors
     lookAt = vec3.normalize(lookAt,vec3.subtract(temp,Center,Eye)); // get lookat vector
     viewRight = vec3.normalize(viewRight,vec3.cross(temp,lookAt,Up)); // get view right vector
     function translateModel(offset) {
         //if (handleKeyDown.modelOn != null)
-        vec3.add(getModels.translation,getModels.translation,offset);
+        vec3.add(getModel.translation,getModel.translation,offset);
+        //console.log(offset);
     }
-
-    for(var i = 0; i <= numEllipsoids-1; i++)
+    var getModel = null;
+    for(var i = 0; i < numEllipsoids; i++)
     {
-        if(inputEllipsoids[i].texture == "down.jpg")
+        /*if(inputEllipsoids[i].texture == "down.jpg")
         {
-            getModels = inputEllipsoids[i];
-            //console.log(getModels);
+            var dist = inputEllipsoids[i].target - inputEllipsoids[i].translation[0];
+            //console.log(dist);
+        }*/
+        if(inputEllipsoids[i].speedX &&
+            !((inputEllipsoids[i].speedX-inputEllipsoids[i].x < inputEllipsoids[i].translation[0]+0.03)&&
+            (inputEllipsoids[i].speedX-inputEllipsoids[i].x > inputEllipsoids[i].translation[0]-0.03)&&
+            (inputEllipsoids[i].speedY-inputEllipsoids[i].y < inputEllipsoids[i].translation[1]+0.03)&&
+            (inputEllipsoids[i].speedY-inputEllipsoids[i].y > inputEllipsoids[i].translation[1]-0.03)))
+        {
+            getModel = (inputEllipsoids[i]);
+            
             translateModel(vec3.scale(temp, viewRight, -inputEllipsoids[i].speedX));
             translateModel(vec3.scale(temp, Up, inputEllipsoids[i].speedY));
+            //console.log(dMissile[1]);
         }
+        
     } 
 
 }
 
-function moveMouse(event)
-{   
-    //console.log("move mouse function");
-    function translateModel(offset)
-    {
-        vec3.add(mouse.translation,mouse.translation,offset);
-    }
+var reached = false;
+var uMissiles = [];
+var antiMissileOver = false;
 
-    if(mouse == null)
-    {
-        //console.log("here1");
-        for(var i = 0; i <= numTriangleSets - 1; i++)
-        {
-            //console.log("here2");
-            console.log(inputTriangles[i].material.texture);
-            if(inputTriangles[i].material.texture == "cross.jpg")
-            {
-                mouse = inputTriangles[i];
-                console.log(mouse);
-            }
-        }
-    }
-
+function mouseUp()
+{
     // set up needed view params
     var lookAt = vec3.create(), viewRight = vec3.create(), temp = vec3.create(); // lookat, right & temp vectors
     lookAt = vec3.normalize(lookAt,vec3.subtract(temp,Center,Eye)); // get lookat vector
     viewRight = vec3.normalize(viewRight,vec3.cross(temp,lookAt,Up)); // get view right vector
 
+    function rotateModel(axis, angle)
+    {
+        if(uMissiles[0] != null)
+        {
+            var newRotation = mat4.create();
+ 
+            mat4.fromRotation(newRotation,angle,axis); // get a rotation matrix around passed axis
+            vec3.transformMat4(uMissiles[0].xAxis,uMissiles[0].xAxis,newRotation); // rotate model x axis tip
+            vec3.transformMat4(uMissiles[0].yAxis,uMissiles[0].yAxis,newRotation); // rotate model y axis tip
+        }
+    }
+    if(uMissiles.length == 0 && !antiMissileOver)
+    {
+        for(var i = 0; i < numEllipsoids; i++)
+        {
+            if(inputEllipsoids[i].texture == "up.jpg" && !inputEllipsoids[i].invisible)
+            {
+                uMissiles.push(inputEllipsoids[i]);
+            }
+        }
+    }
+
     var x = event.clientX - imageCanvas.getBoundingClientRect().left;
     var y = event.clientY - imageCanvas.getBoundingClientRect().top;
-    x = 1.5 - (x/200);
-    y = 1.1 - (y/300);
+    x = 1.7 - (x/213);
+    y = 1.7 - (y/213);
 
-    //console.log(x+"::::"+y);
+    uMissiles[0].speedX = (x - uMissiles[0].x)*0.01;
+    uMissiles[0].speedY = (y - uMissiles[0].y)*0.01;
+    uMissiles[0].destX = x
+    uMissiles[0].destY = y;
 
-    if(mouseX == null || mouseY == null)
+    var direction = (-1 * Math.atan(uMissiles[0].speedY/uMissiles[0].speedX)) + Math.PI/2;
+    if(direction > Math.PI/2)
     {
-        translateModel(vec3.scale(temp,viewRight,-x));
-        translateModel(vec3.scale(temp,Up,y));
-    }
-    else
-    {
-        translateModel(vec3.scale(temp,viewRight,(-x + mouseX)));
-        translateModel(vec3.scale(temp,Up,(y - mouseY))); 
+        direction = direction + Math.PI;
     }
 
-    mouseX = x;
-    mouseY = y;
+    rotateModel(lookAt, direction);
+
+    uMissiles.shift();
+
+    if(uMissiles.length == 0)
+    {
+        uover = true;
+    }
 }
+
+
 /* MAIN -- HERE is where execution begins after window load */
  
 function main() {

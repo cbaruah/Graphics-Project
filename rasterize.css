@@ -11,3 +11,11 @@
     top: 0px;
     z-index: 0;
 }
+
+#scoreCanvas {
+    position: absolute;
+    left: 450px;
+    top: 485px;
+    z-index: 20;
+}
+
