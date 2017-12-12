@@ -936,6 +936,8 @@ var missileOver = false;
 var mouse = null;
 var mouseX = null;
 var mouseY = null;
+var startSound = new Audio("intro.mp3");
+var explosion = new Audio("explosion.mp3");
 /*var bInvisible = false;
 var mInvisible = false;*/
 
@@ -980,17 +982,14 @@ function startMissile()
             var squareY = addY*addY;
             var rootVal = Math.sqrt(squareX + squareY);
             
-            dMissile[index].speedX = (diffX/rootVal)*0.009;
-
-            dMissile[index].speedY = (diffY/rootVal)*0.009;
+            dMissile[index].speedX = (diffX/rootVal)*0.005;
             dMissile[index].destX = dMissile[index].target;
-            dMissile[index].destY = 0;
-            var direction = (-1 * Math.atan(dMissile[index].speedY/dMissile[index].speedX)) + Math.PI/2;
 
-            if(direction > Math.PI/2)
-            {
-                direction = direction + Math.PI;
-            }
+            dMissile[index].speedY = (diffY/rootVal)*0.005;
+            dMissile[index].destY = 0;
+
+            var direction = (-1 * Math.atan(dMissile[index].speedY/dMissile[index].speedX)) + Math.PI/2;
+            direction = direction > Math.PI/2?direction + Math.PI:direction;
 
             rotateModel(lookAt, direction, index);
             dMissile.splice(index,1);
@@ -1034,7 +1033,14 @@ function checkCollisionWithAntiMissile()
                 inputEllipsoids[j].y+inputEllipsoids[j].translation[1]<=(inputEllipsoids[i].y+inputEllipsoids[i].translation[1]+0.05)
                )
                 {
-                    score++;
+                    if(inputEllipsoids[i].texture == "down.jpg")
+                    {
+                       score++; 
+                    }
+                    else if(inputEllipsoids[i].texture == "ufo.jpg")
+                    {
+                        score = score + 2;
+                    }
                     inputEllipsoids[i].invisible = true;
                     inputEllipsoids[j].invisible = true;
                     flag = 0;
@@ -1056,9 +1062,9 @@ function checkCollisionWithAntiMissile()
                         inputTriangles[j].vertices[k][1]+0.05>inputEllipsoids[i].y+inputEllipsoids[i].translation[1]-inputEllipsoids[i].b&&
                         inputTriangles[j].vertices[k][1]-0.05<inputEllipsoids[i].y+inputEllipsoids[i].translation[1]+inputEllipsoids[i].b
                         ){
-                           // console.log("Nichewla" + j);
-                           // console.log("Uperwala" + i);
+                            explosion.play();
                             inputTriangles[j].invisible = true;
+                            inputEllipsoids[i].invisible = true;
                             break;
                         }
                 }
@@ -1094,16 +1100,11 @@ function moveAntiMissile()
     var getModel = null;
     for(var i = 0; i < numEllipsoids; i++)
     {
-        /*if(inputEllipsoids[i].texture == "down.jpg")
+        if(inputEllipsoids[i].texture == "down.jpg")
         {
             var dist = inputEllipsoids[i].target - inputEllipsoids[i].translation[0];
-            //console.log(dist);
-        }*/
-        if(inputEllipsoids[i].speedX &&
-            !((inputEllipsoids[i].speedX-inputEllipsoids[i].x < inputEllipsoids[i].translation[0]+0.03)&&
-            (inputEllipsoids[i].speedX-inputEllipsoids[i].x > inputEllipsoids[i].translation[0]-0.03)&&
-            (inputEllipsoids[i].speedY-inputEllipsoids[i].y < inputEllipsoids[i].translation[1]+0.03)&&
-            (inputEllipsoids[i].speedY-inputEllipsoids[i].y > inputEllipsoids[i].translation[1]-0.03)))
+        }
+        if(inputEllipsoids[i].speedX)
         {
             getModel = (inputEllipsoids[i]);
             
@@ -1118,7 +1119,7 @@ function moveAntiMissile()
 
 var reached = false;
 var uMissiles = [];
-var antiMissileOver = false;
+var screenRes = 2.4;
 
 function mouseUp()
 {
@@ -1137,8 +1138,15 @@ function mouseUp()
             vec3.transformMat4(uMissiles[0].xAxis,uMissiles[0].xAxis,newRotation); // rotate model x axis tip
             vec3.transformMat4(uMissiles[0].yAxis,uMissiles[0].yAxis,newRotation); // rotate model y axis tip
         }
+
+        uMissiles.shift();
     }
-    if(uMissiles.length == 0 && !antiMissileOver)
+
+
+    var x = event.clientX - imageCanvas.getBoundingClientRect().left;
+    var y = event.clientY - imageCanvas.getBoundingClientRect().top;
+
+    if(uMissiles.length == 0)
     {
         for(var i = 0; i < numEllipsoids; i++)
         {
@@ -1149,37 +1157,28 @@ function mouseUp()
         }
     }
 
-    var x = event.clientX - imageCanvas.getBoundingClientRect().left;
-    var y = event.clientY - imageCanvas.getBoundingClientRect().top;
-    x = 1.7 - (x/213);
-    y = 1.7 - (y/213);
+    var divFactor = 512/screenRes;
+    x = (screenRes + 1)/2 - (x/divFactor);
+    y = (screenRes + 1)/2 - (y/divFactor);
 
-    uMissiles[0].speedX = (x - uMissiles[0].x)*0.01;
-    uMissiles[0].speedY = (y - uMissiles[0].y)*0.01;
-    uMissiles[0].destX = x
     uMissiles[0].destY = y;
+    uMissiles[0].destX = x
+
+    uMissiles[0].speedY = (y - uMissiles[0].y)*0.01;
+    uMissiles[0].speedX = (x - uMissiles[0].x)*0.01;
+    
 
     var direction = (-1 * Math.atan(uMissiles[0].speedY/uMissiles[0].speedX)) + Math.PI/2;
-    if(direction > Math.PI/2)
-    {
-        direction = direction + Math.PI;
-    }
+    direction = direction > Math.PI/2?direction + Math.PI:direction;
 
     rotateModel(lookAt, direction);
-
-    uMissiles.shift();
-
-    if(uMissiles.length == 0)
-    {
-        uover = true;
-    }
 }
 
 
 /* MAIN -- HERE is where execution begins after window load */
  
 function main() {
-  
+  startSound.play();
   setupWebGL(); // set up the webGL environment
   loadModels(); // load in the models from tri file
   setupShaders(); // setup the webGL shaders
