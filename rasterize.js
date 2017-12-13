@@ -1164,8 +1164,8 @@ function mouseUp()
     uMissiles[0].destY = y;
     uMissiles[0].destX = x
 
-    uMissiles[0].speedY = (y - uMissiles[0].y)*0.01;
-    uMissiles[0].speedX = (x - uMissiles[0].x)*0.01;
+    uMissiles[0].speedY = (y - uMissiles[0].y)*0.03;
+    uMissiles[0].speedX = (x - uMissiles[0].x)*0.03;
     
 
     var direction = (-1 * Math.atan(uMissiles[0].speedY/uMissiles[0].speedX)) + Math.PI/2;
