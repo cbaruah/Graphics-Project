@@ -938,8 +938,6 @@ var mouseX = null;
 var mouseY = null;
 var startSound = new Audio("intro.mp3");
 var explosion = new Audio("explosion.mp3");
-/*var bInvisible = false;
-var mInvisible = false;*/
 
 function startMissile()
 {
